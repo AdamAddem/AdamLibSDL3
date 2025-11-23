@@ -26,71 +26,73 @@
 
 #include "AABB.hpp"
 #include <algorithm>
-#include <assert.h>
+#include <cassert>
 #include <limits>
 
 namespace aabb
 {
 
-    AABB::AABB() : surfaceArea(0), centre(0, 0)
-    {
-    }
-
     AABB::AABB(const AdamLib::Vec2& lowerBound_, const AdamLib::Vec2& upperBound_) :
-        lowerBound(lowerBound_), upperBound(upperBound_)
+        lowerBound(lowerBound_), upperBound(upperBound_), surfaceArea()
     {
-        surfaceArea = computeSurfaceArea();
-        centre = computeCentre();
+        updateSurfaceArea();
+        updateCentre();
     }
 
-    double AABB::computeSurfaceArea() const
+    AABB::AABB(const AABB& _aabb1, const AABB& _aabb2)
     {
-        double h, w;
-        h = lowerBound.y - upperBound.y;
-        w = upperBound.x - lowerBound.x;
-        return w * h;
+        lowerBound.x = std::min(_aabb1.lowerBound.x, _aabb2.lowerBound.x);
+        upperBound.x = std::max(_aabb1.upperBound.x, _aabb2.upperBound.x);
+
+        lowerBound.y = std::max(_aabb1.lowerBound.y, _aabb2.lowerBound.y);
+        upperBound.y = std::min(_aabb1.upperBound.y, _aabb2.upperBound.y);
+
+        surfaceArea = lowerBound.y - upperBound.y;
+        updateCentre();
     }
 
-    double AABB::getSurfaceArea() const
+    void AABB::updateSurfaceArea()
     {
-        return surfaceArea;
+        surfaceArea = (lowerBound.y - upperBound.y) * (upperBound.x - lowerBound.x);
     }
 
-    void AABB::merge(const AABB& aabb1, const AABB& aabb2)
-    {
-        lowerBound.x = std::min(aabb1.lowerBound.x, aabb2.lowerBound.x);
-        upperBound.x = std::max(aabb1.upperBound.x, aabb2.upperBound.x);
 
-        lowerBound.y = std::max(aabb1.lowerBound.y, aabb2.lowerBound.y);
-        upperBound.y = std::min(aabb1.upperBound.y, aabb2.upperBound.y);
-        
-        surfaceArea = computeSurfaceArea();
-        centre = computeCentre();
+    void AABB::merge(const AABB& _aabb1, const AABB& _aabb2)
+    {
+        lowerBound.x = std::min(_aabb1.lowerBound.x, _aabb2.lowerBound.x);
+        upperBound.x = std::max(_aabb1.upperBound.x, _aabb2.upperBound.x);
+
+        lowerBound.y = std::max(_aabb1.lowerBound.y, _aabb2.lowerBound.y);
+        upperBound.y = std::min(_aabb1.upperBound.y, _aabb2.upperBound.y);
+
+        updateSurfaceArea();
+        updateCentre();
     }
 
-    bool AABB::contains(const AABB& aabb) const
+    bool AABB::contains(const AABB& _aabb) const
     {
-
-        if(aabb.lowerBound.x > lowerBound.x && aabb.lowerBound.y < aabb.lowerBound.y
-         &&aabb.upperBound.x < aabb.upperBound.x && aabb.upperBound.y > aabb.upperBound.y)
+        if(_aabb.lowerBound.x >= lowerBound.x && _aabb.lowerBound.y <= lowerBound.y
+         && _aabb.upperBound.x <= upperBound.x && _aabb.upperBound.y >= upperBound.y)
             return true;
 
         return false;
     }
 
-    bool AABB::overlaps(const AABB& aabb) const
+    bool AABB::overlaps(const AABB& _aabb) const
     {
-        return (!(aabb.upperBound.x < lowerBound.x || aabb.lowerBound.x > upperBound.x ||aabb.upperBound.y > lowerBound.y || aabb.lowerBound.y < upperBound.y));
+        return (!(_aabb.upperBound.x < lowerBound.x || _aabb.lowerBound.x > upperBound.x ||_aabb.upperBound.y > lowerBound.y || _aabb.lowerBound.y < upperBound.y));
     }
 
-    AdamLib::Vec2 AABB::computeCentre()
+    void AABB::updateCentre()
     {
-        return {(upperBound.x - lowerBound.x)/2, (lowerBound.y - upperBound.y)/2};
+        centre = {(upperBound.x - lowerBound.x)/2, (lowerBound.y - upperBound.y)/2};
     }
 
 
 
-    Node::Node()
+    Node::Node() :
+    aabb({0,0}, {0,0}), parent(NULL_NODE),
+    next(), left(), right(), height(), particle()
     {
     }
 
@@ -100,7 +102,7 @@ namespace aabb
     }
 
 
-    
+
     Tree::Tree(double skinThickness_,
                unsigned int nParticles) :
         skinThickness(skinThickness_)
@@ -124,39 +126,9 @@ namespace aabb
         freeList = 0;
     }
 
-    Tree::Tree(double skinThickness_,
-               const AdamLib::Vec2& boxSize_,
-               unsigned int nParticles) :
-        skinThickness(skinThickness_),
-        boxSize(boxSize_)
-    {
-        // Initialise the tree.
-        root = NULL_NODE;
-        nodeCount = 0;
-        nodeCapacity = nParticles;
-        nodes.resize(nodeCapacity);
-
-        // Build a linked list for the list of free nodes.
-        for (unsigned int i=0;i<nodeCapacity-1;i++)
-        {
-            nodes[i].next = i + 1;
-            nodes[i].height = -1;
-        }
-        nodes[nodeCapacity-1].next = NULL_NODE;
-        nodes[nodeCapacity-1].height = -1;
-
-        // Assign the index of the first free node.
-        freeList = 0;
-    }
-
-    void Tree::setBoxSize(const AdamLib::Vec2& boxSize_)
-    {
-        boxSize = boxSize_;
-    }
-
     unsigned int Tree::allocateNode()
     {
-        // Exand the node pool as needed.
+        // Expand the node pool as needed.
         if (freeList == NULL_NODE)
         {
             assert(nodeCount == nodeCapacity);
@@ -179,15 +151,16 @@ namespace aabb
         }
 
         // Peel a node off the free list.
-        unsigned int node = freeList;
-        freeList = nodes[node].next;
-        nodes[node].parent = NULL_NODE;
-        nodes[node].left = NULL_NODE;
-        nodes[node].right = NULL_NODE;
-        nodes[node].height = 0;
+        Node& node = nodes[freeList];
+
+        freeList = node.next;
+        node.parent = NULL_NODE;
+        node.left = NULL_NODE;
+        node.right = NULL_NODE;
+        node.height = 0;
         nodeCount++;
 
-        return node;
+        return freeList;
     }
 
     void Tree::freeNode(unsigned int node)
@@ -201,74 +174,64 @@ namespace aabb
         nodeCount--;
     }
 
-    void Tree::insertParticle(AdamLib::CollisionNode* particle)
+    void Tree::insertParticle(AdamLib::CollisionNode* _particle)
     {
         // Make sure the particle doesn't already exist.
         assert(particleMap.count(particle) == 0);
 
 
         // Allocate a new node for the particle.
-        unsigned int node = allocateNode();
-        const AdamLib::AABB& node_aabb = particle->getAABB();
-        const AdamLib::Vec2& upperBound = node_aabb.top_right_;
-        const AdamLib::Vec2& lowerBound = node_aabb.bottom_left_;
+        unsigned int node_index = allocateNode();
 
         // AABB size in each dimension.
-        double size[2];
+        const auto& [bottom_left, top_right] = _particle->getAABB();
 
-        // Compute the AABB limits.
-        nodes[node].aabb.lowerBound.x = lowerBound.x;
-        nodes[node].aabb.upperBound.x = upperBound.x;
-        size[0] = upperBound.x - lowerBound.x;
+        // AABB size in each dimension.
+        const double sizex = (top_right.x - bottom_left.x) * skinThickness;
+        const double sizey = (bottom_left.y - top_right.y) * skinThickness;
+
+        Node& n = nodes[node_index];
+        AABB& naabb = n.aabb;
+
+        // Assign and fatten the AABB.
+        naabb.lowerBound.x = bottom_left.x - sizex;
+        naabb.upperBound.x = top_right.x + sizex;
+
+        naabb.lowerBound.y = bottom_left.y + sizey;
+        naabb.upperBound.y = top_right.y - sizey;
 
 
-        nodes[node].aabb.lowerBound.y = lowerBound.y;
-        nodes[node].aabb.upperBound.y = upperBound.y;
-        size[1] = upperBound.y - lowerBound.y;
-    
-
-        // Fatten the AABB.
-        nodes[node].aabb.lowerBound.x -= skinThickness * size[0];
-        nodes[node].aabb.upperBound.x += skinThickness * size[0];
-
-        nodes[node].aabb.lowerBound.y += skinThickness * size[1];
-        nodes[node].aabb.upperBound.y -= skinThickness * size[1];
-        
-
-        nodes[node].aabb.surfaceArea = nodes[node].aabb.computeSurfaceArea();
-        nodes[node].aabb.centre = nodes[node].aabb.computeCentre();
+        naabb.updateSurfaceArea();
+        naabb.updateCentre();
 
         // Zero the height.
-        nodes[node].height = 0;
+        n.height = 0;
 
         // Insert a new leaf into the tree.
-        insertLeaf(node);
+        insertLeaf(node_index);
 
         // Add the new particle to the map.
-        particleMap.insert(std::unordered_map<AdamLib::CollisionNode*, unsigned int>::value_type(particle, node));
+        particleMap.insert(std::unordered_map<const AdamLib::CollisionNode*, unsigned int>::value_type(_particle, node_index));
 
         // Store the particle index.
-        nodes[node].particle = particle;
+        n.particle = _particle;
     }
 
-    unsigned int Tree::nParticles()
+    unsigned int Tree::nParticles() const
     {
         return particleMap.size();
     }
 
-    void Tree::removeParticle(AdamLib::CollisionNode* particle)
+    void Tree::removeParticle(const AdamLib::CollisionNode* _particle)
     {
-        // Map iterator.
-        std::unordered_map<AdamLib::CollisionNode*, unsigned int>::iterator it;
-
         // Find the particle.
-        it = particleMap.find(particle);
+        const auto it = particleMap.find(_particle);
 
         // The particle doesn't exist.
         assert(it != particleMap.end());
 
         // Extract the node index.
-        unsigned int node = it->second;
+        const unsigned int node = it->second;
 
         // Erase the particle from the map.
         particleMap.erase(it);
@@ -283,7 +246,7 @@ namespace aabb
     void Tree::removeAll()
     {
         // Iterator pointing to the start of the particle map.
-        std::unordered_map<AdamLib::CollisionNode*, unsigned int>::iterator it = particleMap.begin();
+        auto it = particleMap.begin();
 
         // Iterate over the map.
         while (it != particleMap.end())
@@ -297,7 +260,7 @@ namespace aabb
             removeLeaf(node);
             freeNode(node);
 
-            it++;
+            ++it;
         }
 
         // Clear the particle map.
@@ -305,66 +268,59 @@ namespace aabb
     }
 
 
-    bool Tree::updateParticle(AdamLib::CollisionNode* particle, bool alwaysReinsert)
+    bool Tree::updateParticle(const AdamLib::CollisionNode* _particle, bool _alwaysReinsert)
     {
-        // Map iterator.
-        std::unordered_map<AdamLib::CollisionNode*, unsigned int>::iterator it;
-
         // Find the particle.
-        it = particleMap.find(particle);
+        const auto it = particleMap.find(_particle);
 
         // The particle doesn't exist.
         assert(it != particleMap.end());
 
-        // Extract the node index.
-        unsigned int node = it->second;
+        // Extract the node.
+        const unsigned int node_index = it->second;
+        Node& node = nodes[node_index];
 
         assert(node < nodeCapacity);
         assert(nodes[node].isLeaf());
 
         // AABB size in each dimension.
-        double size[2];
-        const AdamLib::AABB& node_aabb = particle->getAABB();
-        const AdamLib::Vec2& upperBound = node_aabb.top_right_;
-        const AdamLib::Vec2& lowerBound = node_aabb.bottom_left_;
+        const auto& [bottom_left, top_right] = _particle->getAABB();
 
-        // Compute the AABB limits.
-
-        size[0] = upperBound.x - lowerBound.x;
-        size[1] = lowerBound.y - upperBound.y;
-        
+        // AABB size in each dimension.
+        const double sizex = (top_right.x - bottom_left.x) * skinThickness;
+        const double sizey = (bottom_left.y - top_right.y) * skinThickness;
 
         // Create the new AABB.
-        AABB aabb(lowerBound, upperBound);
+        AABB aabb(bottom_left, top_right);
 
         // No need to update if the particle is still within its fattened AABB.
-        if (!alwaysReinsert && nodes[node].aabb.contains(aabb)) return false;
+        if (!_alwaysReinsert && node.aabb.contains(aabb)) return false;
 
         // Remove the current leaf.
-        removeLeaf(node);
+        removeLeaf(node_index);
 
-        // Fatten the new AABB.
+        // Assign and fatten the AABB.
+        aabb.lowerBound.x = bottom_left.x - sizex;
+        aabb.upperBound.x = top_right.x + sizex;
 
-        aabb.lowerBound.x -= skinThickness * size[0];
-        aabb.upperBound.x += skinThickness * size[0];
+        aabb.lowerBound.y = bottom_left.y + sizey;
+        aabb.upperBound.y = top_right.y - sizey;
 
-        aabb.lowerBound.y += skinThickness * size[1];
-        aabb.upperBound.y -= skinThickness * size[1];
+        aabb.updateSurfaceArea();
+        aabb.updateCentre();
+
+
 
         // Assign the new AABB.
-        nodes[node].aabb = aabb;
-
-        // Update the surface area and centroid.
-        nodes[node].aabb.surfaceArea = nodes[node].aabb.computeSurfaceArea();
-        nodes[node].aabb.centre = nodes[node].aabb.computeCentre();
+        node.aabb = aabb;
 
         // Insert a new leaf node.
-        insertLeaf(node);
+        insertLeaf(node_index);
 
         return true;
     }
 
-    std::vector<AdamLib::CollisionNode*> Tree::query(AdamLib::CollisionNode* particle)
+    std::vector<AdamLib::CollisionNode*> Tree::query(const AdamLib::CollisionNode* particle)
     {
         // Make sure that this is a valid particle.
         assert(particleMap.count(particle) != 0);
@@ -373,34 +329,31 @@ namespace aabb
         return query(particle, nodes[particleMap[particle]].aabb);
     }
 
-    std::vector<AdamLib::CollisionNode*> Tree::query(AdamLib::CollisionNode* particle, const AABB& aabb)
+    std::vector<AdamLib::CollisionNode *> Tree::query(const AdamLib::CollisionNode *_particle, const AABB &_aabb) const
     {
-        std::vector<unsigned int> stack;
-        stack.reserve(256);
+        std::vector<unsigned int> stack(256);
         stack.push_back(root);
 
         std::vector<AdamLib::CollisionNode*> particles;
 
-        while (stack.size() > 0)
+        while (stack.empty())
         {
-            unsigned int node = stack.back();
+            const unsigned int node = stack.back();
             stack.pop_back();
 
-            // Copy the AABB.
-            AABB nodeAABB = nodes[node].aabb;
+            const AABB& nodeAABB = nodes[node].aabb;
 
             if(node == NULL_NODE) continue;
 
-            if (aabb.overlaps(nodeAABB))
+            if (_aabb.overlaps(nodeAABB))
             {
                 // Check that we're at a leaf node.
                 if (nodes[node].isLeaf())
                 {
                     // Can't interact with itself.
-                    if (nodes[node].particle != particle)
-                    {
+                    if (nodes[node].particle != _particle)
                         particles.push_back(nodes[node].particle);
-                    }
+
                 }
                 else
                 {
@@ -414,23 +367,23 @@ namespace aabb
     }
 
 
-    const AABB& Tree::getAABB(AdamLib::CollisionNode* particle)
+    const AABB& Tree::getAABB(const AdamLib::CollisionNode* particle)
     {
         return nodes[particleMap[particle]].aabb;
     }
 
-    void Tree::insertLeaf(unsigned int leaf)
+    void Tree::insertLeaf(unsigned int _index)
     {
         if (root == NULL_NODE)
         {
-            root = leaf;
+            root = _index;
             nodes[root].parent = NULL_NODE;
             return;
         }
 
         // Find the best sibling for the node.
 
-        AABB leafAABB = nodes[leaf].aabb;
+        AABB leafAABB = nodes[_index].aabb;
         unsigned int index = root;
 
         while (!nodes[index].isLeaf())
@@ -441,8 +394,7 @@ namespace aabb
 
             double surfaceArea = nodes[index].aabb.getSurfaceArea();
 
-            AABB combinedAABB;
-            combinedAABB.merge(nodes[index].aabb, leafAABB);
+            AABB combinedAABB(nodes[index].aabb, leafAABB);
             double combinedSurfaceArea = combinedAABB.getSurfaceArea();
 
             // Cost of creating a new parent for this node and the new leaf.
@@ -455,14 +407,12 @@ namespace aabb
             double costLeft;
             if (nodes[left].isLeaf())
             {
-                AABB aabb;
-                aabb.merge(leafAABB, nodes[left].aabb);
+                AABB aabb(leafAABB, nodes[left].aabb);
                 costLeft = aabb.getSurfaceArea() + inheritanceCost;
             }
             else
             {
-                AABB aabb;
-                aabb.merge(leafAABB, nodes[left].aabb);
+                AABB aabb(leafAABB, nodes[left].aabb);
                 double oldArea = nodes[left].aabb.getSurfaceArea();
                 double newArea = aabb.getSurfaceArea();
                 costLeft = (newArea - oldArea) + inheritanceCost;
@@ -472,14 +422,12 @@ namespace aabb
             double costRight;
             if (nodes[right].isLeaf())
             {
-                AABB aabb;
-                aabb.merge(leafAABB, nodes[right].aabb);
+                AABB aabb(leafAABB, nodes[right].aabb);
                 costRight = aabb.getSurfaceArea() + inheritanceCost;
             }
             else
             {
-                AABB aabb;
-                aabb.merge(leafAABB, nodes[right].aabb);
+                AABB aabb(leafAABB, nodes[right].aabb);
                 double oldArea = nodes[right].aabb.getSurfaceArea();
                 double newArea = aabb.getSurfaceArea();
                 costRight = (newArea - oldArea) + inheritanceCost;
@@ -509,22 +457,22 @@ namespace aabb
             else                                  nodes[oldParent].right = newParent;
 
             nodes[newParent].left = sibling;
-            nodes[newParent].right = leaf;
+            nodes[newParent].right = _index;
             nodes[sibling].parent = newParent;
-            nodes[leaf].parent = newParent;
+            nodes[_index].parent = newParent;
         }
         // The sibling was the root.
         else
         {
             nodes[newParent].left = sibling;
-            nodes[newParent].right = leaf;
+            nodes[newParent].right = _index;
             nodes[sibling].parent = newParent;
-            nodes[leaf].parent = newParent;
+            nodes[_index].parent = newParent;
             root = newParent;
         }
 
         // Walk back up the tree fixing heights and AABBs.
-        index = nodes[leaf].parent;
+        index = nodes[_index].parent;
         while (index != NULL_NODE)
         {
             index = balance(index);
@@ -762,14 +710,14 @@ namespace aabb
     {
         if (root == NULL_NODE) return 0.0;
 
-        double rootArea = nodes[root].aabb.computeSurfaceArea();
+        const double rootArea = nodes[root].aabb.getSurfaceArea();
         double totalArea = 0.0;
 
         for (unsigned int i=0; i<nodeCapacity;i++)
         {
             if (nodes[i].height < 0) continue;
 
-            totalArea += nodes[i].aabb.computeSurfaceArea();
+            totalArea += nodes[i].aabb.getSurfaceArea();
         }
 
         return totalArea / rootArea;
@@ -818,7 +766,7 @@ namespace aabb
         while (count > 1)
         {
             double minCost = std::numeric_limits<double>::max();
-            int iMin = -1, jMin = -1;
+            unsigned int iMin = -1, jMin = -1;
 
             for (unsigned int i=0;i<count;i++)
             {
@@ -827,8 +775,7 @@ namespace aabb
                 for (unsigned int j=i+1;j<count;j++)
                 {
                     AABB aabbj = nodes[nodeIndices[j]].aabb;
-                    AABB aabb;
-                    aabb.merge(aabbi, aabbj);
+                    AABB aabb(aabbi, aabbj);
                     double cost = aabb.getSurfaceArea();
 
                     if (cost < minCost)
@@ -894,8 +841,8 @@ namespace aabb
     {
         if (node == NULL_NODE) return;
 
-        unsigned int left = nodes[node].left;
-        unsigned int right = nodes[node].right;
+        const unsigned int left = nodes[node].left;
+        const unsigned int right = nodes[node].right;
 
         if (nodes[node].isLeaf())
         {
@@ -908,14 +855,13 @@ namespace aabb
         assert(left < nodeCapacity);
         assert(right < nodeCapacity);
 
-        int height1 = nodes[left].height;
-        int height2 = nodes[right].height;
-        int height = 1 + std::max(height1, height2);
+        const int height1 = nodes[left].height;
+        const int height2 = nodes[right].height;
+        const int height = 1 + std::max(height1, height2);
         (void)height; // Unused variable in Release build
         assert(nodes[node].height == height);
 
-        AABB aabb;
-        aabb.merge(nodes[left].aabb, nodes[right].aabb);
+        AABB aabb(nodes[left].aabb, nodes[right].aabb);
 
 
         assert(aabb.lowerBound.x == nodes[node].aabb.lowerBound.x);

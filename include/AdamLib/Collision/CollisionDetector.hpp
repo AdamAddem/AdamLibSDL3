@@ -8,6 +8,7 @@ namespace AdamLib
 
 class CollisionNode;
 class CollisionTree;
+
 //! A Broad-Phase Collision Detection Tree
 /*! 
     Contains a dynamic AABB Tree. 

@@ -1,6 +1,5 @@
 #pragma once
 
-#include <AdamLib/Defines.hpp>
 #include <AdamLib/Utilities/Math.hpp>
 #include <variant>
 
@@ -25,7 +24,7 @@ struct AABB
 
 struct CollisionRectangle
 {
-  CollisionRectangle(const Vec2& _center, const double _width, const double _height);
+  CollisionRectangle(const Vec2& _center, double _width, double _height);
 
   Vec2 center_; //!<Center of rectangle, relative to parent
   Vec2 width_height_; //!<The width and height of rectangle, x = w,  y = h
@@ -33,7 +32,7 @@ struct CollisionRectangle
 
 struct CollisionCircle
 {
-  CollisionCircle(const Vec2& _center, const double _r);
+  CollisionCircle(const Vec2& _center, double _r);
 
 
 
@@ -44,7 +43,7 @@ struct CollisionCircle
 
 struct CollisionCapsule
 {
-  CollisionCapsule(const Vec2& _a_center, const Vec2& _b_center, const double _r);
+  CollisionCapsule(const Vec2& _a_center, const Vec2& _b_center, double _r);
 
 
   Vec2 a_center_; //!<Circle a center, relative to parent
@@ -54,7 +53,7 @@ struct CollisionCapsule
 
 struct CollisionRay
 {
-  CollisionRay(const Vec2& _center, const Vec2& _direction_normalized, const double _len);
+  CollisionRay(const Vec2& _center, const Vec2& _direction_normalized, double _len);
   
   Vec2 direction_normalized_; //!<The direction of the ray, with positive y pointing downwards
 

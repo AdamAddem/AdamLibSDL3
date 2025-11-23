@@ -10,9 +10,9 @@
 
 using namespace AdamLib;
 
+//aabb::Tree detectors[16];
 
-
-constexpr inline c2AABB aabbConversion(const CollisionRectangle* _rect, const double _xoffset, const double _yoffset)
+constexpr c2AABB aabbConversion(const CollisionRectangle* _rect, const double _xoffset, const double _yoffset)
 {
   return 
   {
@@ -20,8 +20,7 @@ constexpr inline c2AABB aabbConversion(const CollisionRectangle* _rect, const do
     {_rect->center_.x + _rect->width_height_.x/2 + _xoffset, _rect->center_.y + _rect->width_height_.y/2 + _yoffset}
   };
 }
-
-constexpr inline c2Circle circleConversion(const CollisionCircle* _circle, const double _xoffset, const double _yoffset)
+constexpr c2Circle circleConversion(const CollisionCircle* _circle, const double _xoffset, const double _yoffset)
 {
   return 
   {
@@ -29,8 +28,7 @@ constexpr inline c2Circle circleConversion(const CollisionCircle* _circle, const
     _circle->r_
   };
 }
-
-constexpr inline c2Capsule capsuleConversion(const CollisionCapsule* _capsule, const double _xoffset, const double _yoffset)
+constexpr c2Capsule capsuleConversion(const CollisionCapsule* _capsule, const double _xoffset, const double _yoffset)
 {
   return 
   {
@@ -108,25 +106,25 @@ bool CollisionDetector::determineCollisionBetween(CollisionNode* _c1, CollisionN
   
   
 
-  if(CollisionRectangle* rect = std::get_if<CollisionRectangle>(&_c1->shape_))
+  if(const auto* rect = std::get_if<CollisionRectangle>(&_c1->shape_))
   {
     type1 = C2_TYPE_AABB;
     rect1 = aabbConversion(rect, xoffset + _c1->pos_.x, yoffset + _c1->pos_.y);
     c2_1 = &rect1;
   }
-  else if(CollisionCircle* circ = std::get_if<CollisionCircle>(&_c1->shape_))
+  else if(const auto* circ = std::get_if<CollisionCircle>(&_c1->shape_))
   {
     type1 = C2_TYPE_CIRCLE;
     circ1 = circleConversion(circ, xoffset + _c1->pos_.x, yoffset + _c1->pos_.y);
     c2_1 = &circ1;
   }
-  else if(CollisionCapsule* caps = std::get_if<CollisionCapsule>(&_c1->shape_))
+  else if(const auto* caps = std::get_if<CollisionCapsule>(&_c1->shape_))
   {
     type1 = C2_TYPE_CAPSULE;
     cap1 = capsuleConversion(caps, xoffset + _c1->pos_.x, yoffset + _c1->pos_.y);
     c2_1 = &cap1;
   }
-  else if(CollisionRay* ray = std::get_if<CollisionRay>(&_c1->shape_))
+  else if(auto* ray = std::get_if<CollisionRay>(&_c1->shape_))
   {
     assert(0);
   }
@@ -134,25 +132,25 @@ bool CollisionDetector::determineCollisionBetween(CollisionNode* _c1, CollisionN
     assert(0);
 
 
-  if(CollisionRectangle* rect = std::get_if<CollisionRectangle>(&_c2->shape_))
+  if(const auto* rect = std::get_if<CollisionRectangle>(&_c2->shape_))
   {
     type2 = C2_TYPE_AABB;
     rect2 = aabbConversion(rect, xoffset + _c2->pos_.x, yoffset + _c2->pos_.y);
     c2_2 = &rect2;
   }
-  else if(CollisionCircle* circ = std::get_if<CollisionCircle>(&_c2->shape_))
+  else if(const auto* circ = std::get_if<CollisionCircle>(&_c2->shape_))
   {
     type2 = C2_TYPE_CIRCLE;
     circ2 = circleConversion(circ, xoffset + _c2->pos_.x, yoffset + _c2->pos_.y);
     c2_2 = &circ2;
   }
-  else if(CollisionCapsule* caps = std::get_if<CollisionCapsule>(&_c2->shape_))
+  else if(const auto* caps = std::get_if<CollisionCapsule>(&_c2->shape_))
   {
     type2 = C2_TYPE_CAPSULE;
     cap2 = capsuleConversion(caps, xoffset + _c2->pos_.x, yoffset + _c2->pos_.y);
     c2_2 = &cap2;
   }
-  else if(CollisionRay* ray = std::get_if<CollisionRay>(&_c2->shape_))
+  else if(auto* ray = std::get_if<CollisionRay>(&_c2->shape_))
   {
     assert(0);
   }

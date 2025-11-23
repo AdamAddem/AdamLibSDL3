@@ -11,22 +11,17 @@ using namespace AdamLib;
 
 CollisionDetector detector({1280, 720});
 
-struct Player : SpriteNodeInstanceController
+struct Player : CollisionNodeInstanceController
 {
   double speed = 500;
   Vec2 velocity{0,0};
-  Signal<double, int> dick;
-
-  void dodick(double d, int p)
-  {
-    static bool vis = false;
-    self()->setVisibility(vis);
-    vis = !vis;
-  }
 
   void process(double _dt) override
   {
+
     self()->movePos(velocity * _dt);
+    detector.updateTree();
+    detector.queryTreeForCollisions();
   }
 
   void onReady() override
@@ -35,14 +30,7 @@ struct Player : SpriteNodeInstanceController
     RegisterKeyChangeConnection(KEY_LEFT, doMovement);
     RegisterKeyChangeConnection(KEY_UP, doMovement);
     RegisterKeyChangeConnection(KEY_DOWN, doMovement);
-    RegisterKeyChangeConnection(KEY_Q, dosig);
-    RegisterCustomConnection(dick, dodick);
-
-  }
-
-  void dosig()
-  {
-    dick.emit(2, 3);
+    RegisterKeyChangeConnection(KEY_LSHIFT, doMovement);
   }
 
   void doMovement()
@@ -50,29 +38,34 @@ struct Player : SpriteNodeInstanceController
     velocity.x = Input::keystate(KEY_RIGHT) - Input::keystate(KEY_LEFT);
     velocity.y = Input::keystate(KEY_DOWN) - Input::keystate(KEY_UP);
 
+
+
     velocity.normalize();
     velocity *= speed;
+    if(Input::keystate(KEY_LSHIFT))
+      velocity /= 4.0;
   }
 
 };
 
-SpriteNodeTemplate player_spr{"Player_Sprite", "assets/goated.jpg", SpriteController(Player)};
-CollisionNodeTemplate player_coll{"Player_Collision", CollisionRectangle(Vec2(0,0), 144, 144)};
+CollisionNodeTemplate player_coll{"Player_Collision", CollisionRectangle(Vec2(0,0), 144, 144), CollisionController(Player)};
+CollisionNodeTemplate box_coll{"Box_Collision", CollisionRectangle(Vec2(0,0), 144, 144)};
 
 
-
-void loadgame()
-{
-
+void loadgame() {
   Node& root = Node::getRoot();
-  player_spr.default_pos_ = {200,200};
-  player_spr.registerChildTemplate(&player_coll);
 
+  player_coll.default_pos_ = {200,200};
   player_coll.renderCollision = true;
 
+  box_coll.default_pos_ = {400,400};
+  box_coll.renderCollision = true;
 
+  CollisionNode* player = (CollisionNode*)player_coll.createInstance();
+  CollisionNode* box = (CollisionNode*)box_coll.createInstance();
 
-  root.addChild(player_spr.createInstance());
-  CollisionNode* n = (CollisionNode*)root.getMyChild("Player_Sprite/Player_Collision");
-  detector.addCollisionNode(n);
+  root.addChild(player);
+  root.addChild(box);
+  detector.addCollisionNode(player);
+  detector.addCollisionNode(box);
 }

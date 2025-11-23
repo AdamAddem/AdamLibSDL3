@@ -20,7 +20,7 @@ Core:
 
 
 Collision:
-  -Finish boolean collision for all types in CollisionDetector
+  -Implement polygon and ray collision
   -Implement GJK collision for all types in CollisionDetector
   -Implement some sort of global detection system
   -Only update tree when collision object has moved
