@@ -22,6 +22,7 @@ add_library(adam_lib SHARED
 
   Utilities/math.cpp
   Utilities/signal.cpp
+        Collision/CollisionDetectorInternal.hpp
 )
 
 target_include_directories(adam_lib

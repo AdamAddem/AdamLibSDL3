@@ -36,10 +36,8 @@
 #include <AdamLib/Nodes/CollisionNode.hpp>
 #include <AdamLib/Utilities/Math.hpp>
 #include <vector>
-#include <unordered_map>
+#include <unordered_set>
 
-/// Null node flag.
-constexpr unsigned int NULL_NODE = 0xffffffff;
 
 namespace aabb
 {
@@ -64,6 +62,9 @@ namespace aabb
                 The upper bound in each dimension.
          */
         AABB(const AdamLib::Vec2& _lowerBound, const AdamLib::Vec2& _upperBound);
+
+        AABB(const AdamLib::AABB&);
+
 
         //! Merge Constructor
         /*! \param _aabb1
@@ -152,17 +153,14 @@ namespace aabb
     struct Node
     {
         /// Constructor.
-        Node();
+        explicit Node(const AdamLib::CollisionNode* _particle = nullptr);
 
         /// The fattened axis-aligned bounding box.
         AABB aabb;
 
         /// Index of the parent node.
         unsigned int parent;
-
-        /// Index of the next node.
-        unsigned int next;
-
+      
         /// Index of the left-hand child.
         unsigned int left;
 
@@ -173,7 +171,7 @@ namespace aabb
         int height;
 
         /// The particle that the node contains (leaf nodes only).
-        AdamLib::CollisionNode* particle;
+        const AdamLib::CollisionNode* particle;
 
         //! Test whether the node is a leaf.
         /*! \return
@@ -196,97 +194,48 @@ namespace aabb
                 The skin thickness for fattened AABBs, as a fraction
                 of the AABB base length.
 
-            \param nParticles
-                The number of particles (for fixed particle number systems).
-
          */
-        explicit Tree(double skinThickness_ = 0.05,
-            unsigned int nParticles = 16);
+        explicit Tree(double skinThickness_ = 0.05);
 
 
         //! Insert a particle into the tree (arbitrary shape with bounding box).
         /*! \param _particle
                 The pointer to the particle.
          */
-        void insertParticle(AdamLib::CollisionNode* _particle);
-
-        /// Return the number of particles in the tree.
-        unsigned int nParticles() const;
-
+        void insertParticle(const AdamLib::CollisionNode* _particle);
+      
         //! Remove a particle from the tree.
         /*! \param _particle
                 The particle pointer (particleMap will be used to map the node).
          */
         void removeParticle(const AdamLib::CollisionNode* _particle);
-
+      
         //! Remove all particles from the tree.
         void removeAll();
 
-        //! Update the tree if a particle moves outside its fattened AABB.
-        /*! \param _particle
-                The particle pointer (particleMap will be used to map the node).
-
-            \param _alwaysReinsert
-                Always reinsert the particle, even if it's within its old AABB (default: false)
-         */
-        bool updateParticle(const AdamLib::CollisionNode *_particle, bool _alwaysReinsert = false);
+        void updateParticle(const AdamLib::CollisionNode *_particle, bool _alwaysReinsert = false);
+      
+        static void determineCollisionBetween(const AdamLib::CollisionNode* _c1, const AdamLib::CollisionNode* _c2);
 
         //! Query the tree to find candidate interactions for a particle.
-        /*! \param particle
-
-            \return particles
-                A vector of particle indices.
-         */
-        std::vector<AdamLib::CollisionNode*> query(const AdamLib::CollisionNode *particle);
-
-        //! Query the tree to find candidate interactions for an AABB.
         /*! \param _particle
-                The particle pointer.
 
-            \param _aabb
-                The AABB.
-
-            \return particles
-                A vector of particle pointers.
          */
-        std::vector<AdamLib::CollisionNode*> query(const AdamLib::CollisionNode *_particle, const AABB &_aabb) const;
+        //void query(const AdamLib::CollisionNode* _particle) const;
 
-        //! Get a particle AABB.
-        /*! \param particle
-         */
-        const AABB& getAABB(const AdamLib::CollisionNode *particle);
+        void queryAll() const;
 
         //! Get the height of the tree.
         /*! \return
                 The height of the binary tree.
          */
         unsigned int getHeight() const;
-
-        //! Get the number of nodes in the tree.
-        /*! \return
-                The number of nodes in the tree.
-         */
-        unsigned int getNodeCount() const;
-
-        //! Compute the maximum balance of the tree.
-        /*! \return
-                The maximum difference between the height of two
-                children of a node.
-         */
-        unsigned int computeMaximumBalance() const;
-
-        //! Compute the surface area ratio of the tree.
-        /*! \return
-                The ratio of the sum of the node surface area to the surface
-                area of the root node.
-         */
-        double computeSurfaceAreaRatio() const;
-
+      
         /// Validate the tree.
         void validate() const;
 
         /// Rebuild an optimal tree.
-        void rebuild();
+        // void rebuild();
 
     private:
         /// The index of the root node.
@@ -295,33 +244,20 @@ namespace aabb
         /// The dynamic tree.
         std::vector<Node> nodes;
 
-        /// The current number of nodes in the tree.
-        unsigned int nodeCount;
-
-        /// The current node capacity.
-        unsigned int nodeCapacity;
-
-        /// The position of node at the top of the free list.
-        unsigned int freeList;
+        std::unordered_set<const AdamLib::CollisionNode*> leaves;
 
         /// The skin thickness of the fattened AABBs, as a fraction of the AABB base length.
         double skinThickness;
-
-        /// A map between particle and node indices.
-        std::unordered_map<const AdamLib::CollisionNode*, unsigned int> particleMap;
-
+      
         //! Allocate a new node.
         /*! \return
                 The index of the allocated node.
          */
-        unsigned int allocateNode();
+        unsigned int allocateNode(const AdamLib::CollisionNode* _particle = nullptr);
 
-        //! Free an existing node.
-        /*! \param _index
-                The index of the node to be freed.
-         */
-        void freeNode(unsigned int _index);
+        void freeNode(unsigned int node);
 
+      
         //! Insert a leaf into the tree.
         /*! \param _index
                 The index of the leaf node.
@@ -333,6 +269,8 @@ namespace aabb
                 The index of the leaf node.
          */
         void removeLeaf(unsigned int _index);
+
+        int findNode(const AdamLib::CollisionNode* _particle) const;
 
         //! Balance the tree.
         /*! \param _node_index
@@ -366,39 +304,6 @@ namespace aabb
                 The index of the root node.
          */
         void validateMetrics(unsigned int _root_index) const;
-
-    };
-}
-
-namespace AdamLib
-{
-    struct CollisionTree
-    {
-        aabb::Tree internal_tree;
-        inline CollisionTree(const float _skinThickness, const Vec2& _dimensions) : internal_tree(_skinThickness)
-        {
-
-        }
-
-        inline void insertParticle(CollisionNode* _insert)
-        {
-            internal_tree.insertParticle(_insert);
-        }
-
-        inline void removeParticle(CollisionNode* _removal)
-        {
-            internal_tree.removeParticle(_removal);
-        }
-
-        inline std::vector<CollisionNode*> query(CollisionNode* _subject)
-        {
-            return internal_tree.query(TODO);
-        }
-
-        inline void updateParticle(CollisionNode* _updateee)
-        {
-            internal_tree.updateParticle(_updateee);
-        }
 
     };
 }

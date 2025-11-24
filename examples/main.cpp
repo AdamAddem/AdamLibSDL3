@@ -4,6 +4,7 @@
 #include <AdamLib/Nodes/Node.hpp>
 #include "test.hpp"
 
+#include <iostream>
 using namespace AdamLib;
 
 int main(int argc, char** argv)
@@ -17,6 +18,7 @@ int main(int argc, char** argv)
     root.process(update());
     Node::freeQueued();
     Renderer::render_all();
+    
   }
 
 

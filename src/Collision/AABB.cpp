@@ -24,21 +24,69 @@
   http://www.box2d.org
 */
 
+/*
+
+    Its called we do a little altering
+
+*/
+
+#include <AdamLib/Nodes/CollisionNode.hpp>
+#include <AdamLib/Collision/CollisionShapes.hpp>
+
+
 #include "AABB.hpp"
+#include "cute_c2.hpp"
 #include <algorithm>
 #include <cassert>
 #include <limits>
+#include <iostream>
+
+
+constexpr unsigned int NULL_NODE = std::numeric_limits<unsigned int>::max();
+
+using namespace AdamLib;
+
+
+constexpr c2AABB aabbConversion(const CollisionRectangle* _rect, const double _xoffset, const double _yoffset)
+{
+  return 
+  {
+      {_rect->center_.x - _rect->width_height_.x/2 + _xoffset, _rect->center_.y - _rect->width_height_.y/2 + _yoffset}, 
+      {_rect->center_.x + _rect->width_height_.x/2 + _xoffset, _rect->center_.y + _rect->width_height_.y/2 + _yoffset}
+  };
+}
+constexpr c2Circle circleConversion(const CollisionCircle* _circle, const double _xoffset, const double _yoffset)
+{
+  return 
+  {
+      {_circle->center_.x + _xoffset, -_circle->center_.y + _yoffset}, 
+      _circle->r_
+    };
+}
+constexpr c2Capsule capsuleConversion(const CollisionCapsule* _capsule, const double _xoffset, const double _yoffset)
+{
+  return 
+  {
+      {_capsule->a_center_.x + _xoffset, _capsule->a_center_.y + _yoffset}, 
+      {_capsule->b_center_.x + _xoffset, _capsule->b_center_.y + _yoffset}, 
+      _capsule->r_
+    };
+}
 
 namespace aabb
 {
-
+    AABB::AABB(const AdamLib::AABB& ab) : lowerBound(ab.bottom_left_), upperBound(ab.top_right_), surfaceArea()
+    {
+      updateSurfaceArea();
+      updateCentre();
+    }
+  
     AABB::AABB(const AdamLib::Vec2& lowerBound_, const AdamLib::Vec2& upperBound_) :
         lowerBound(lowerBound_), upperBound(upperBound_), surfaceArea()
     {
         updateSurfaceArea();
         updateCentre();
     }
-
     AABB::AABB(const AABB& _aabb1, const AABB& _aabb2)
     {
         lowerBound.x = std::min(_aabb1.lowerBound.x, _aabb2.lowerBound.x);
@@ -50,13 +98,10 @@ namespace aabb
         surfaceArea = lowerBound.y - upperBound.y;
         updateCentre();
     }
-
     void AABB::updateSurfaceArea()
     {
         surfaceArea = (lowerBound.y - upperBound.y) * (upperBound.x - lowerBound.x);
     }
-
-
     void AABB::merge(const AABB& _aabb1, const AABB& _aabb2)
     {
         lowerBound.x = std::min(_aabb1.lowerBound.x, _aabb2.lowerBound.x);
@@ -68,7 +113,6 @@ namespace aabb
         updateSurfaceArea();
         updateCentre();
     }
-
     bool AABB::contains(const AABB& _aabb) const
     {
         if(_aabb.lowerBound.x >= lowerBound.x && _aabb.lowerBound.y <= lowerBound.y
@@ -77,111 +121,48 @@ namespace aabb
 
         return false;
     }
-
     bool AABB::overlaps(const AABB& _aabb) const
     {
-        return (!(_aabb.upperBound.x < lowerBound.x || _aabb.lowerBound.x > upperBound.x ||_aabb.upperBound.y > lowerBound.y || _aabb.lowerBound.y < upperBound.y));
+        return (_aabb.upperBound.x > lowerBound.x && _aabb.lowerBound.x < upperBound.x &&_aabb.upperBound.y < lowerBound.y && _aabb.lowerBound.y > upperBound.y);
     }
-
     void AABB::updateCentre()
     {
         centre = {(upperBound.x - lowerBound.x)/2, (lowerBound.y - upperBound.y)/2};
     }
 
-
-
-    Node::Node() :
+  
+    Node::Node(const AdamLib::CollisionNode* _particle) :
     aabb({0,0}, {0,0}), parent(NULL_NODE),
-    next(), left(), right(), height(), particle()
+    left(NULL_NODE), right(NULL_NODE), height(-1), particle(_particle)
     {
+      if(_particle)
+        aabb = {_particle->getAABB()};
     }
-
     bool Node::isLeaf() const
     {
         return (left == NULL_NODE);
     }
 
+  
+    Tree::Tree(double skinThickness_) :
+    root(NULL_NODE), skinThickness(skinThickness_) {}
 
-
-    Tree::Tree(double skinThickness_,
-               unsigned int nParticles) :
-        skinThickness(skinThickness_)
+    unsigned int Tree::allocateNode(const CollisionNode* _particle)
     {
-        // Initialise the tree.
-        root = NULL_NODE;
-        nodeCount = 0;
-        nodeCapacity = nParticles;
-        nodes.resize(nodeCapacity);
-
-        // Build a linked list for the list of free nodes.
-        for (unsigned int i=0;i<nodeCapacity-1;i++)
-        {
-            nodes[i].next = i + 1;
-            nodes[i].height = -1;
-        }
-        nodes[nodeCapacity-1].next = NULL_NODE;
-        nodes[nodeCapacity-1].height = -1;
-
-        // Assign the index of the first free node.
-        freeList = 0;
-    }
-
-    unsigned int Tree::allocateNode()
-    {
-        // Expand the node pool as needed.
-        if (freeList == NULL_NODE)
-        {
-            assert(nodeCount == nodeCapacity);
-
-            // The free list is empty. Rebuild a bigger pool.
-            nodeCapacity *= 2;
-            nodes.resize(nodeCapacity);
-
-            // Build a linked list for the list of free nodes.
-            for (unsigned int i=nodeCount;i<nodeCapacity-1;i++)
-            {
-                nodes[i].next = i + 1;
-                nodes[i].height = -1;
-            }
-            nodes[nodeCapacity-1].next = NULL_NODE;
-            nodes[nodeCapacity-1].height = -1;
-
-            // Assign the index of the first free node.
-            freeList = nodeCount;
-        }
-
-        // Peel a node off the free list.
-        Node& node = nodes[freeList];
-
-        freeList = node.next;
-        node.parent = NULL_NODE;
-        node.left = NULL_NODE;
-        node.right = NULL_NODE;
-        node.height = 0;
-        nodeCount++;
-
-        return freeList;
+        nodes.emplace_back(_particle);
+        return nodes.size() - 1;
     }
 
     void Tree::freeNode(unsigned int node)
     {
-        assert(node < nodeCapacity);
-        assert(0 < nodeCount);
-
-        nodes[node].next = freeList;
-        nodes[node].height = -1;
-        freeList = node;
-        nodeCount--;
+      nodes[node].height = -1;
+      nodes[node].particle = nullptr;
     }
 
-    void Tree::insertParticle(AdamLib::CollisionNode* _particle)
+    void Tree::insertParticle(const CollisionNode* _particle)
     {
-        // Make sure the particle doesn't already exist.
-        assert(particleMap.count(particle) == 0);
-
-
         // Allocate a new node for the particle.
-        unsigned int node_index = allocateNode();
+        const unsigned int node_index = allocateNode(_particle);
 
         // AABB size in each dimension.
         const auto& [bottom_left, top_right] = _particle->getAABB();
@@ -209,75 +190,34 @@ namespace aabb
 
         // Insert a new leaf into the tree.
         insertLeaf(node_index);
-
-        // Add the new particle to the map.
-        particleMap.insert(std::unordered_map<const AdamLib::CollisionNode*, unsigned int>::value_type(_particle, node_index));
-
-        // Store the particle index.
+      
         n.particle = _particle;
+        leaves.insert(_particle);
     }
 
-    unsigned int Tree::nParticles() const
+    void Tree::removeParticle(const CollisionNode* _particle)
     {
-        return particleMap.size();
-    }
-
-    void Tree::removeParticle(const AdamLib::CollisionNode* _particle)
-    {
-        // Find the particle.
-        const auto it = particleMap.find(_particle);
-
-        // The particle doesn't exist.
-        assert(it != particleMap.end());
-
-        // Extract the node index.
-        const unsigned int node = it->second;
-
-        // Erase the particle from the map.
-        particleMap.erase(it);
-
-        assert(node < nodeCapacity);
-        assert(nodes[node].isLeaf());
-
-        removeLeaf(node);
-        freeNode(node);
+      const int node_index = findNode(_particle);
+      if(node_index == -1) return;
+      
+      removeLeaf(node_index);
+      freeNode(node_index);
+      leaves.erase(_particle);
     }
 
     void Tree::removeAll()
     {
-        // Iterator pointing to the start of the particle map.
-        auto it = particleMap.begin();
-
-        // Iterate over the map.
-        while (it != particleMap.end())
-        {
-            // Extract the node index.
-            unsigned int node = it->second;
-
-            assert(node < nodeCapacity);
-            assert(nodes[node].isLeaf());
-
-            removeLeaf(node);
-            freeNode(node);
-
-            ++it;
-        }
-
-        // Clear the particle map.
-        particleMap.clear();
+      nodes.clear();
+      leaves.clear();
     }
-
-
-    bool Tree::updateParticle(const AdamLib::CollisionNode* _particle, bool _alwaysReinsert)
+  
+    void Tree::updateParticle(const CollisionNode* _particle, bool _alwaysReinsert)
     {
-        // Find the particle.
-        const auto it = particleMap.find(_particle);
-
-        // The particle doesn't exist.
-        assert(it != particleMap.end());
-
         // Extract the node.
-        const unsigned int node_index = it->second;
+        const unsigned int node_index = findNode(_particle);
+        if(node_index == -1)
+          return;
+      
         Node& node = nodes[node_index];
 
         assert(node < nodeCapacity);
@@ -294,8 +234,8 @@ namespace aabb
         AABB aabb(bottom_left, top_right);
 
         // No need to update if the particle is still within its fattened AABB.
-        if (!_alwaysReinsert && node.aabb.contains(aabb)) return false;
-
+        if (!_alwaysReinsert && node.aabb.contains(aabb)) return;
+      
         // Remove the current leaf.
         removeLeaf(node_index);
 
@@ -308,70 +248,183 @@ namespace aabb
 
         aabb.updateSurfaceArea();
         aabb.updateCentre();
-
-
-
+      
         // Assign the new AABB.
         node.aabb = aabb;
-
+      
         // Insert a new leaf node.
         insertLeaf(node_index);
-
-        return true;
     }
 
-    std::vector<AdamLib::CollisionNode*> Tree::query(const AdamLib::CollisionNode* particle)
-    {
-        // Make sure that this is a valid particle.
-        assert(particleMap.count(particle) != 0);
 
-        // Test overlap of particle AABB against all other particles.
-        return query(particle, nodes[particleMap[particle]].aabb);
+
+    /*
+    void Tree::query(const AdamLib::CollisionNode* _particle) const
+    {
+      const int node_index = findNode(_particle);
+      if(node_index == -1)
+          return;
+
+      std::vector<unsigned int> stack(256);
+      stack.push_back(root);
+
+      std::vector<const AdamLib::CollisionNode*> particles;
+    
+      const AABB& _aabb = nodes[node_index].aabb;
+
+      while (stack.empty())
+      {
+          const unsigned int index = stack.back();
+          stack.pop_back();
+        
+          if(index == NULL_NODE) continue;
+
+          if (const Node& node = nodes[index]; _aabb.overlaps(node.aabb))
+          {
+              // Check that we're at a leaf node.
+              if (node.isLeaf())
+              {
+                  // Can't interact with itself.
+                  if (node.particle != _particle)
+                      _particle->signalCollisionWith(node.particle);
+                
+              }
+              else
+              {
+                  stack.push_back(node.left);
+                  stack.push_back(node.right);
+              }
+          }
+      }
+
     }
+    */
 
-    std::vector<AdamLib::CollisionNode *> Tree::query(const AdamLib::CollisionNode *_particle, const AABB &_aabb) const
+    void Tree::queryAll() const // this is fucking stupid
     {
-        std::vector<unsigned int> stack(256);
+      static std::unordered_set<const CollisionNode*> checkedNodes;
+      checkedNodes.clear();
+
+      for(const auto particle : leaves)
+      {
+
+        const int node_index = findNode(particle);
+        if(node_index == -1)
+          return;
+
+        static std::vector<unsigned int> stack(256);
+        stack.clear();
         stack.push_back(root);
+        
+        const AABB& _aabb = nodes[node_index].aabb;
 
-        std::vector<AdamLib::CollisionNode*> particles;
-
-        while (stack.empty())
+        while (!stack.empty())
         {
-            const unsigned int node = stack.back();
-            stack.pop_back();
+          const unsigned int index = stack.back();
+          stack.pop_back();
+        
+          if(index == NULL_NODE) continue;
 
-            const AABB& nodeAABB = nodes[node].aabb;
-
-            if(node == NULL_NODE) continue;
-
-            if (_aabb.overlaps(nodeAABB))
+          if (const Node& node = nodes[index]; _aabb.overlaps(node.aabb))
+          {
+            // Check that we're at a leaf node.
+            if (node.isLeaf())
             {
-                // Check that we're at a leaf node.
-                if (nodes[node].isLeaf())
-                {
-                    // Can't interact with itself.
-                    if (nodes[node].particle != _particle)
-                        particles.push_back(nodes[node].particle);
-
-                }
-                else
-                {
-                    stack.push_back(nodes[node].left);
-                    stack.push_back(nodes[node].right);
-                }
+              
+              //Don't interact with a particle twice, and not itself
+              if (node.particle != particle && !checkedNodes.contains(node.particle))
+                determineCollisionBetween(node.particle, particle);
+              
             }
+            else
+            {
+              stack.push_back(node.left);
+              stack.push_back(node.right);
+            }
+          }
+        }
+        
+        checkedNodes.insert(particle);
+      }
+    }
+
+    void Tree::determineCollisionBetween(const CollisionNode* _c1, const CollisionNode* _c2)
+      {
+        C2_TYPE type1, type2;
+        c2AABB rect1, rect2;
+        c2Circle circ1, circ2;
+        c2Capsule cap1, cap2;
+        void *c2_1 = NULL, *c2_2 = NULL;
+
+        //center on the origin for floating point precision purposes.
+        double xoffset = std::min(_c1->pos_.x, _c2->pos_.x);
+        double yoffset = std::min(_c1->pos_.y, _c2->pos_.y);
+
+
+    
+    
+
+        if(const auto* rect = std::get_if<CollisionRectangle>(&_c1->shape_))
+        {
+          type1 = C2_TYPE_AABB;
+          rect1 = aabbConversion(rect, xoffset + _c1->pos_.x, yoffset + _c1->pos_.y);
+          c2_1 = &rect1;
+        }
+        else if(const auto* circ = std::get_if<CollisionCircle>(&_c1->shape_))
+        {
+          type1 = C2_TYPE_CIRCLE;
+          circ1 = circleConversion(circ, xoffset + _c1->pos_.x, yoffset + _c1->pos_.y);
+          c2_1 = &circ1;
+        }
+        else if(const auto* caps = std::get_if<CollisionCapsule>(&_c1->shape_))
+        {
+          type1 = C2_TYPE_CAPSULE;
+          cap1 = capsuleConversion(caps, xoffset + _c1->pos_.x, yoffset + _c1->pos_.y);
+          c2_1 = &cap1;
+        }
+        else if(auto* ray = std::get_if<CollisionRay>(&_c1->shape_))
+        {
+          assert(0);
+        }
+        else
+          assert(0);
+
+
+        if(const auto* rect = std::get_if<CollisionRectangle>(&_c2->shape_))
+        {
+          type2 = C2_TYPE_AABB;
+          rect2 = aabbConversion(rect, xoffset + _c2->pos_.x, yoffset + _c2->pos_.y);
+          c2_2 = &rect2;
+        }
+        else if(const auto* circ = std::get_if<CollisionCircle>(&_c2->shape_))
+        {
+          type2 = C2_TYPE_CIRCLE;
+          circ2 = circleConversion(circ, xoffset + _c2->pos_.x, yoffset + _c2->pos_.y);
+          c2_2 = &circ2;
+        }
+        else if(const auto* caps = std::get_if<CollisionCapsule>(&_c2->shape_))
+        {
+          type2 = C2_TYPE_CAPSULE;
+          cap2 = capsuleConversion(caps, xoffset + _c2->pos_.x, yoffset + _c2->pos_.y);
+          c2_2 = &cap2;
+        }
+        else if(auto* ray = std::get_if<CollisionRay>(&_c2->shape_))
+        {
+          assert(0);
+        }
+        else
+          assert(0);
+
+
+
+        if(c2Collided(c2_1, NULL, type1, c2_2, NULL, type2))
+        {
+          _c1->signalCollisionWith(_c2);
+          _c2->signalCollisionWith(_c1);
         }
 
-        return particles;
-    }
-
-
-    const AABB& Tree::getAABB(const AdamLib::CollisionNode* particle)
-    {
-        return nodes[particleMap[particle]].aabb;
-    }
-
+      }
+  
     void Tree::insertLeaf(unsigned int _index)
     {
         if (root == NULL_NODE)
@@ -490,32 +543,34 @@ namespace aabb
         }
     }
 
-    void Tree::removeLeaf(unsigned int leaf)
+    void Tree::removeLeaf(unsigned int _index)
     {
-        if (leaf == root)
+        if (_index == root)
         {
             root = NULL_NODE;
             return;
         }
 
-        unsigned int parent = nodes[leaf].parent;
-        unsigned int grandParent = nodes[parent].parent;
-        unsigned int sibling;
+        const unsigned int parentIndex = nodes[_index].parent;
+        const Node& parentNode = nodes[parentIndex];
 
-        if (nodes[parent].left == leaf) sibling = nodes[parent].right;
-        else                            sibling = nodes[parent].left;
+        const unsigned int grandParentIndex = nodes[parentIndex].parent;
+        const unsigned int siblingIndex = (parentNode.left == _index) ? parentNode.right : parentNode.left;
+        Node& siblingNode = nodes[siblingIndex];
 
         // Destroy the parent and connect the sibling to the grandparent.
-        if (grandParent != NULL_NODE)
+        if (grandParentIndex != NULL_NODE)
         {
-            if (nodes[grandParent].left == parent) nodes[grandParent].left = sibling;
-            else                                   nodes[grandParent].right = sibling;
+          Node& grandParentNode = nodes[grandParentIndex];
+          
+            if (grandParentNode.left == parentIndex) grandParentNode.left = siblingIndex;
+            else                                     grandParentNode.right = siblingIndex;
 
-            nodes[sibling].parent = grandParent;
-            freeNode(parent);
+            siblingNode.parent = grandParentIndex;
+            freeNode(parentIndex);
 
             // Adjust ancestor bounds.
-            unsigned int index = grandParent;
+            unsigned int index = grandParentIndex;
             while (index != NULL_NODE)
             {
                 index = balance(index);
@@ -531,12 +586,27 @@ namespace aabb
         }
         else
         {
-            root = sibling;
-            nodes[sibling].parent = NULL_NODE;
-            freeNode(parent);
+            root = siblingIndex;
+            siblingNode.parent = NULL_NODE;
+            freeNode(parentIndex);
         }
     }
 
+    int Tree::findNode(const AdamLib::CollisionNode *_particle) const
+    {
+      int node_index = 0;
+      for(auto& f : nodes)
+      {
+        if(f.particle == _particle)
+          return node_index;
+
+        ++node_index;
+      }
+
+      return -1;
+
+    }
+  
     unsigned int Tree::balance(unsigned int node)
     {
         assert(node != NULL_NODE);
@@ -683,46 +753,7 @@ namespace aabb
         if (root == NULL_NODE) return 0;
         return nodes[root].height;
     }
-
-    unsigned int Tree::getNodeCount() const
-    {
-        return nodeCount;
-    }
-
-    unsigned int Tree::computeMaximumBalance() const
-    {
-        unsigned int maxBalance = 0;
-        for (unsigned int i=0; i<nodeCapacity; i++)
-        {
-            if (nodes[i].height <= 1)
-                continue;
-
-            assert(nodes[i].isLeaf() == false);
-
-            unsigned int balance = std::abs(nodes[nodes[i].left].height - nodes[nodes[i].right].height);
-            maxBalance = std::max(maxBalance, balance);
-        }
-
-        return maxBalance;
-    }
-
-    double Tree::computeSurfaceAreaRatio() const
-    {
-        if (root == NULL_NODE) return 0.0;
-
-        const double rootArea = nodes[root].aabb.getSurfaceArea();
-        double totalArea = 0.0;
-
-        for (unsigned int i=0; i<nodeCapacity;i++)
-        {
-            if (nodes[i].height < 0) continue;
-
-            totalArea += nodes[i].aabb.getSurfaceArea();
-        }
-
-        return totalArea / rootArea;
-    }
-
+  
     void Tree::validate() const
     {
 #ifndef NDEBUG
@@ -744,9 +775,10 @@ namespace aabb
 #endif
     }
 
+    /*
     void Tree::rebuild()
     {
-        std::vector<unsigned int> nodeIndices(nodeCount);
+        std::vector<unsigned int> nodeIndices(nodes.size());
         unsigned int count = 0;
 
         for (unsigned int i=0;i<nodeCapacity;i++)
@@ -759,8 +791,9 @@ namespace aabb
                 nodes[i].parent = NULL_NODE;
                 nodeIndices[count] = i;
                 count++;
+              nodes.erase(4);
             }
-            else freeNode(i);
+            else nodes.erase(nodes.begin() + i);
         }
 
         while (count > 1)
@@ -809,7 +842,8 @@ namespace aabb
 
         validate();
     }
-
+    */
+  
     void Tree::validateStructure(unsigned int node) const
     {
         if (node == NULL_NODE) return;
@@ -861,7 +895,7 @@ namespace aabb
         (void)height; // Unused variable in Release build
         assert(nodes[node].height == height);
 
-        AABB aabb(nodes[left].aabb, nodes[right].aabb);
+        AABB  aabb(nodes[left].aabb, nodes[right].aabb);
 
 
         assert(aabb.lowerBound.x == nodes[node].aabb.lowerBound.x);

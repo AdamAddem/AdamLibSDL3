@@ -17,3 +17,6 @@
 
 //Maximum quantity of Signals allowed, stupid stupid stupid reason for this 
 #define MAXIMUM_SIGNALS 1024
+
+//Number of collision layers. Shouldn't need more than 8 normally.
+#define NUM_COLLISION_LAYERS 8

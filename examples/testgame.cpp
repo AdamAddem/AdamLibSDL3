@@ -9,8 +9,6 @@
 
 using namespace AdamLib;
 
-CollisionDetector detector({1280, 720});
-
 struct Player : CollisionNodeInstanceController
 {
   double speed = 500;
@@ -20,8 +18,7 @@ struct Player : CollisionNodeInstanceController
   {
 
     self()->movePos(velocity * _dt);
-    detector.updateTree();
-    detector.queryTreeForCollisions();
+    CollisionDetector::queryTreeForCollisions();
   }
 
   void onReady() override
@@ -31,6 +28,11 @@ struct Player : CollisionNodeInstanceController
     RegisterKeyChangeConnection(KEY_UP, doMovement);
     RegisterKeyChangeConnection(KEY_DOWN, doMovement);
     RegisterKeyChangeConnection(KEY_LSHIFT, doMovement);
+  }
+
+  void onCollisionWith(const CollisionNode *_collider) override
+  {
+    std::cout << "Dick!" << std::endl;
   }
 
   void doMovement()
@@ -66,6 +68,5 @@ void loadgame() {
 
   root.addChild(player);
   root.addChild(box);
-  detector.addCollisionNode(player);
-  detector.addCollisionNode(box);
+  
 }

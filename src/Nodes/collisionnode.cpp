@@ -3,6 +3,7 @@
 #include <AdamLib/Nodes/CollisionNode.hpp>
 
 #include "../Core/RendererInternal.hpp"
+#include "../Collision/CollisionDetectorInternal.hpp"
 
 #include <cassert>
 #include <memory>
@@ -12,8 +13,8 @@ using namespace AdamLib;
 
 
 
-CollisionNode::CollisionNode(const std::string& _name, const CollisionShape& _shape, bool _doRendering, NodeInstanceController* _controller,  Node* _parent) :
-  Node(_name, _controller, _parent), shape_(_shape), doRendering_(_doRendering), points_to_render_(std::make_unique<Renderer::SetOfPoints>())
+CollisionNode::CollisionNode(const std::string& _name, const CollisionShape& _shape, uint8_t _collision_layer, bool _doRendering, NodeInstanceController* _controller,  Node* _parent) :
+  Node(_name, _controller, _parent), shape_(_shape), points_to_render_(std::make_unique<Renderer::SetOfPoints>()), doRendering_(_doRendering), collision_layer_(_collision_layer)
 {
   if(const CollisionRectangle* rect = std::get_if<CollisionRectangle>(&shape_))
   {
@@ -111,17 +112,21 @@ CollisionNode::CollisionNode(const std::string& _name, const CollisionShape& _sh
     points_to_render_->points_[1].y = ray->p2_.y + pos_.y;
   }
   else
-    assert(0);
+    assert(false);
 
   if(_doRendering)
     Renderer::addSetPoints(points_to_render_.get());
+
+  if(_collision_layer >= NUM_COLLISION_LAYERS)
+      _collision_layer = NUM_COLLISION_LAYERS - 1;
+  CollisionDetector::addCollisionNode(this);
 }
 
 CollisionNode::~CollisionNode()
 {
   Renderer::removeSetPoints(points_to_render_.get());
+  CollisionDetector::removeCollisionNode(this);
 }
-
 
 void CollisionNode::setCollisionRendering(const bool _renderCollision)
 {
@@ -139,6 +144,8 @@ void CollisionNode::movePos(const Vec2& _move)
   aabb_.bottom_left_ += _move;
   aabb_.top_right_ += _move;
 
+  CollisionDetector::updateCollisionNode(this);
+
   for(auto& [px, py] : points_to_render_->points_)
   {
     px += _move.x;
@@ -146,6 +153,12 @@ void CollisionNode::movePos(const Vec2& _move)
   }
 }
 
+void CollisionNode::signalCollisionWith(const CollisionNode* _collider) const
+{
+  if(controller_)
+    static_cast<CollisionNodeInstanceController*>(controller_.get())->onCollisionWith(_collider);
+
+}
 
 /*----- CollisionNodeTemplate -----*/
 

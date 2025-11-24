@@ -37,7 +37,7 @@ SignalGeneric::~SignalGeneric(){removeSignal(signal_id_);}
 ConnectionController::ConnectionController(SignalGeneric* _signal, uint32_t _connection_id) 
 : signal_(_signal), connection_id_(_connection_id), signal_id_(_signal->signal_id_) {}
 
-ConnectionController::ConnectionController(ConnectionController&& _c) : signal_(_c.signal_), connection_id_(_c.connection_id_), signal_id_(_c.signal_id_)
+ConnectionController::ConnectionController(ConnectionController&& _c) noexcept : signal_(_c.signal_), connection_id_(_c.connection_id_), signal_id_(_c.signal_id_)
 {
   _c.reset();
 }

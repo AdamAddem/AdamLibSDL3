@@ -25,7 +25,7 @@ struct SignalGeneric
 struct ConnectionController
 {
   ConnectionController(SignalGeneric* _signal, uint32_t _connection_id);
-  ConnectionController(ConnectionController&& _c);
+  ConnectionController(ConnectionController&& _c) noexcept ;
   ~ConnectionController();
 
   void operator=(ConnectionController&& _c);
